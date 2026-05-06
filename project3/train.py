@@ -82,10 +82,10 @@ def solver(model_name):
 
     ### ========= TODO : START ========= ###
     # Define the loss function
-    loss = None
+    loss_fn = nn.CrossEntropyLoss()
 
     # Define the optimizer
-    optimizer = None
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
     ### ======== TODO : END ========= ###
 
     if config.scheduler:
@@ -101,9 +101,22 @@ def solver(model_name):
         train_loss = None # You can use this variable to store the training loss for the current iteration
         ### ======== TODO : START ========= ###
         # Do the forward pass, compute the loss, do the backward pass, and update the weights with the optimizer.
-        
-        
-        
+        context = context.to(device, non_blocking=True)
+        target = target.to(device, non_blocking=True)
+
+        logits = model(context)
+        logits_flat = rearrange(logits, "b t v -> (b t) v")
+        target_flat = rearrange(target, "b t -> (b t)")
+
+        train_loss = loss_fn(logits_flat, target_flat)
+
+        optimizer.zero_grad()
+        train_loss.backward()
+        if config.to_clip_grad:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), config.gradient_clip)
+        optimizer.step()
+
+        train_loss = train_loss.item()
         
         ### ======== TODO : END ========= ###
 
@@ -120,10 +133,20 @@ def solver(model_name):
             # Compute the evaluation loss on the eval dataset.
             # Hint:
             # - Remember to manually break out of the evaluation loop as the dataloader wraps around the dataset.
-            
-            
-            
-            
+            losses = []
+            num_eval_batches = 20
+            with torch.no_grad():
+                for j, (ec, et) in enumerate(eval_dataloader):
+                    if j >= num_eval_batches:
+                        break
+                    ec = ec.to(device, non_blocking=True)
+                    et = et.to(device, non_blocking=True)
+                    el = model(ec)
+                    el_flat = rearrange(el, "b t v -> (b t) v")
+                    et_flat = rearrange(et, "b t -> (b t)")
+                    losses.append(loss_fn(el_flat, et_flat).item())
+            eval_loss = sum(losses) / len(losses) if losses else float("nan")
+
             ### ======== TODO : END ========= ###
             
             print(

@@ -7,8 +7,10 @@ from typing import Optional
 class BigramConfig:
     context_length: int = 1
     path_to_data: Path = Path("data")
-    to_log: bool = True
-    log_interval: int = 100
+    # to_log: bool = True
+    to_log: bool = False
+    # log_interval: int = 100
+    log_interval: int = 1000
     save_path: Path = Path("models/bigram/")
     batch_size: int = 32
     scheduler: bool = False
@@ -18,7 +20,8 @@ class BigramConfig:
     embed_dim: int = 32
     dropout: float = 0.1
     save_iterations: int = 10000
-    max_iter: int = 500000
+    # max_iter: int = 500000
+    max_iter: int = 50000
     learning_rate: float = 1e-4
 
 
@@ -45,11 +48,15 @@ class MiniGPTConfig:
     out_dropout: float = 0.1  # Dropout in the output layer
     embed_dropout: float = 0.1  # Dropout in the embedding layer
     learning_rate: float = 3e-4  # Learning rate for the optimizer
-    log_interval: int = 10
+    # log_interval: int = 10
+    log_interval: int = 100
     save_path: Path = Path("models/minigpt/")
-    save_iterations: int = 10000
-    to_log: bool = True
-    max_iter: int = 500000
+    # save_iterations: int = 10000
+    save_iterations: int = 1000
+    # to_log: bool = True
+    to_log: bool = False
+    # max_iter: int = 500000
+    max_iter: int = 5000
     to_clip_grad: bool = False
     gradient_clip: float = 1.0
     scheduler: bool = False
