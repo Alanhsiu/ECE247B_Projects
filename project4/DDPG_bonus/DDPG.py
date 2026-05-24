@@ -1,4 +1,4 @@
-import torch
+_import torch
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn
@@ -54,14 +54,19 @@ class OU_Noise:
         # TODO:
         # hint look at line 36
         # ====================================
-        raise NotImplementedError
+        # raise NotImplementedError
+        self.state = np.ones(self.action_space) * self.mu
+        self.sigma = sigma
 
         # ========== YOUR CODE ENDS ==========
 
     def _sample(self):
         """sample the noise per the discretized Ornstein-Uhlenbeck process detailed in the notebook"""
         # ========== YOUR CODE HERE ==========
-        raise NotImplementedError
+        # raise NotImplementedError
+        dx = self.theta * (self.mu - self.state) + self.sigma * np.random.randn(self.action_space)
+        self.state = self.state + dx
+        return self.state
 
         # ========== YOUR CODE ENDS ==========
 
@@ -78,7 +83,10 @@ class OU_Noise:
         # TODO:
         # you can use the _sample method to get the noise
         # ====================================
-        raise NotImplementedError
+        # raise NotImplementedError
+        noisy_action = action + self._sample()
+        noisy_action = np.clip(noisy_action, self.action_range[0], self.action_range[1])
+        return noisy_action
 
         # ========== YOUR CODE ENDS ==========
 
@@ -242,13 +250,52 @@ class DDPG:
         # update the model
         # return the losses
         # ====================================
-        raise NotImplementedError
+        # raise NotImplementedError
+        # 1. Sample batch
+        states, actions, rewards, next_states, dones = self.replay_buffer.sample(batch_size, device=self.device)
+        
+        # 2. 計算 target Q（用 target networks，且不要 backprop 到 target）
+        with torch.no_grad():
+            next_actions = self.target_actor(next_states)
+            target_q = self.target_critic(next_states, next_actions).squeeze(-1)
+            # done 時不加未來項
+            y = rewards + self.gamma * target_q * (~dones).float()
+        
+        # 3. 計算 current Q
+        current_q = self.critic(states, actions).squeeze(-1)
+        
+        # 4. Critic loss = MSE(current_q, y)
+        critic_loss = self.loss_fn(current_q, y)
+        
+        # 5. 更新 critic
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        self.critic_optimizer.step()
+        
+        # 6. Actor loss = -mean(Q(s, actor(s)))
+        # 想 maximize Q，所以加負號變成 minimize
+        actor_loss = -self.critic(states, self.actor(states)).mean()
+        
+        # 7. 更新 actor
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self.actor_optimizer.step()
+        
+        # 8. Soft update target networks
+        self._update_model()
+        
+        return critic_loss.item(), actor_loss.item()
 
         # ========== YOUR CODE ENDS ==========
 
     def _update_model(self):
         # ========== YOUR CODE HERE ==========
-        raise NotImplementedError
+        # raise NotImplementedError
+        for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
+        
+        for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
 
         # ========== YOUR CODE ENDS ==========
 
@@ -289,7 +336,33 @@ class DDPG:
                 # if the replay buffer is large enough, and it is time to train the model
                 # and update the total Q and actor loss
                 # ====================================
-                raise NotImplementedError
+                # raise NotImplementedError
+                # 1. Actor 算 action（要從 tensor 轉回 numpy）
+                with torch.no_grad():
+                    action = self.actor(
+                        torch.tensor(state).float().to(self.device).unsqueeze(0)
+                    ).cpu().numpy()[0]
+                
+                # 2. 加上 OU noise
+                action = self.OU_noise.noise(action)
+                
+                # 3. 跟環境互動
+                next_state, reward, terminated, truncated, _ = self.env.step(action)
+                done = terminated or truncated
+                
+                # 4. 存進 replay buffer
+                self.replay_buffer.add(state, action, reward, next_state, done)
+                
+                # 5. 更新 state 和累積 reward
+                state = next_state
+                total_reward += reward
+                
+                # 6. Buffer 夠大、且到達 train_every 的時機，就訓練
+                if len(self.replay_buffer) >= self.batch_size and l % train_every == 0:
+                    q_loss, a_loss = self._train_one_batch(self.batch_size)
+                    Q_loss_total += q_loss
+                    actor_loss_total += a_loss
+                l += 1
 
                 # ========== YOUR CODE ENDS ==========
 

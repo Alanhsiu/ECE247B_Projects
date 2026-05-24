@@ -26,7 +26,11 @@ class MLP(nn.Module):
         # self.output = 
         # self.non_linear = 
         # ====================================
-        raise NotImplementedError("MLP not implemented")
+        # raise NotImplementedError("MLP not implemented")
+        
+        self.linear1 = nn.Linear(input_size, hidden_size)
+        self.output = nn.Linear(hidden_size, action_size)
+        self.non_linear = non_linear()
     
 
 
@@ -34,9 +38,10 @@ class MLP(nn.Module):
 
     def forward(self, x:torch.Tensor)->torch.Tensor:
         # ========== YOUR CODE HERE ==========
-        raise NotImplementedError("MLP forward not implemented")
-    
-
+        # raise NotImplementedError("MLP forward not implemented")
+        
+        x = self.non_linear(self.linear1(x))
+        x = self.output(x)
 
         # ========== YOUR CODE ENDS ==========
         return x
@@ -61,17 +66,29 @@ class Nature_Paper_Conv(nn.Module):
         """
         super(Nature_Paper_Conv, self).__init__()
         # ========== YOUR CODE HERE ==========
-        raise NotImplementedError("Nature_Paper_Conv not implemented")
+        # raise NotImplementedError("Nature_Paper_Conv not implemented")
+        
+        n_channels = input_size[0]
+        self.CNN = nn.Sequential(
+            nn.Conv2d(n_channels, 32, kernel_size=8, stride=4),   # CNN.0
+            nn.ReLU(),                                            # CNN.1
+            nn.Conv2d(32, 64, kernel_size=4, stride=2),           # CNN.2
+            nn.ReLU(),                                            # CNN.3
+            nn.Conv2d(64, 64, kernel_size=3, stride=1),           # CNN.4
+            nn.ReLU(),                                            # CNN.5
+        )
+        # FC head uses the MLP class — names will be MLP.linear1, MLP.output
+        self.MLP = MLP(64 * 7 * 7, action_size, hidden_size=512)
     
-
-
         # ========== YOUR CODE ENDS ==========
 
     def forward(self, x:torch.Tensor)->torch.Tensor:
         # ========== YOUR CODE HERE ==========
-        raise NotImplementedError("Nature_Paper_Conv forward not implemented")
-    
-
+        # raise NotImplementedError("Nature_Paper_Conv forward not implemented")
+        
+        x = self.CNN(x)
+        x = x.view(x.size(0), -1)
+        x = self.MLP(x)
     
         # ========== YOUR CODE ENDS ==========
         return x

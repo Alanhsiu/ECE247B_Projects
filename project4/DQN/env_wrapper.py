@@ -2,10 +2,10 @@ import cv2
 import numpy as np
 import gymnasium as gym
 import matplotlib.pyplot as plt
-from Project4.DQN.utils import (
-    preprocess,
-)  # this is a helper function that may be useful to grayscale and crop the image
-
+# from Project4.DQN.utils import (
+#     preprocess,
+# )  # this is a helper function that may be useful to grayscale and crop the image
+from utils import preprocess
 
 class EnvWrapper(gym.Wrapper):
     def __init__(
@@ -53,7 +53,20 @@ class EnvWrapper(gym.Wrapper):
         # 3. crop and resize the final frame
         # 4. stack the frames to form the initial state
         # ====================================
-        raise NotImplementedError("reset in env_wrapper not implemented")
+        # raise NotImplementedError("reset in env_wrapper not implemented")
+        
+        # 1. reset env
+        s, info = self.env.reset(**kwargs)
+
+        # 2. do nothing for initial_no_op steps
+        for _ in range(self.initial_no_op):
+            s, r, terminated, truncated, info = self.env.step(self.do_nothing_action)
+
+        # 3. preprocess (crop + grayscale + normalize, already done in utils.preprocess)
+        s = preprocess(s)
+
+        # 4. stack the same frame `stack_frames` times as initial state
+        self.stacked_state = np.tile(s, (self.stack_frames, 1, 1))
 
         # ========== YOUR CODE ENDS ==========
 
@@ -81,7 +94,21 @@ class EnvWrapper(gym.Wrapper):
         # 3. preprocess the final observed frame.
         # 4. append new frame to `self.stacked_state` and remove oldest.
         # ====================================
-        raise NotImplementedError("step in env_wrapper not implemented")
+        # raise NotImplementedError("step in env_wrapper not implemented")
+        
+        # 1. repeat action for skip_frames steps, summing rewards
+        reward = 0
+        for _ in range(self.skip_frames):
+            s, r, terminated, truncated, info = self.env.step(action)
+            reward += r
+            if terminated or truncated:
+                break
+
+        # 2. preprocess final frame
+        s = preprocess(s)
+
+        # 3. append new frame, remove oldest (FIFO stack)
+        self.stacked_state = np.concatenate([self.stacked_state[1:], s[np.newaxis]], axis=0)
 
         # ========== YOUR CODE ENDS ==========
         return self.stacked_state, reward, terminated, truncated, info

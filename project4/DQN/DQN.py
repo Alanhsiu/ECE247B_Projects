@@ -3,14 +3,17 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.nn
 import gymnasium as gym
-from Project4.DQN.replay_buffer import ReplayBufferDQN
+# from Project4.DQN.replay_buffer import ReplayBufferDQN
 import wandb
 import random
 import numpy as np
 import os
 import time
-from Project4.DQN.utils import exponential_decay
+# from Project4.DQN.utils import exponential_decay
 import typing
+
+from replay_buffer import ReplayBufferDQN
+from utils import exponential_decay
 
 # TODO: change the logging here if you don't like wandb
 
@@ -173,7 +176,34 @@ class DQN:
         # 6. compute loss between current Q and target Q
         # 7. backprop
         # ====================================
-        raise NotImplementedError("optimize_model func in DQN class not implemented")
+        # raise NotImplementedError("optimize_model func in DQN class not implemented")
+        
+        # 1. check if buffer has enough samples (warm-start threshold: 10 * batch_size)
+        if len(self.replay_buffer) < 10 * self.batch_size:
+            return False, 0
+
+        # 2. sample a minibatch
+        states, actions, rewards, next_states, dones = self.replay_buffer.sample(
+            self.batch_size, device=self.device
+        )
+
+        # 3. current Q: Q(s, a) — pick the Q-value of the action that was actually taken
+        q_values = self.model(states).gather(1, actions.unsqueeze(1)).squeeze(1)
+
+        # 4. target Q: r + gamma * max_a' Q(s', a') ; zero out for terminal transitions
+        with torch.no_grad():
+            next_q_values = self.model(next_states).max(dim=1)[0]
+            target_q = rewards + self.gamma * next_q_values * (~dones)
+
+        # 5. loss
+        loss = self.loss_fn(q_values, target_q)
+
+        # 6. backprop
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        return True, loss.item()
 
         # ========== YOUR CODE ENDS ==========
 
@@ -194,7 +224,17 @@ class DQN:
         #  - if probability epsilon: random action
         #  - else: greedy action
         # ====================================
-        raise NotImplementedError("sample_action func in DQN class not implemented")
+        # raise NotImplementedError("sample_action func in DQN class not implemented")
+        
+        if random.random() < epsilon:
+            # explore: random action
+            index = random.randint(0, self.env.action_space.n - 1)
+        else:
+            # exploit: greedy action
+            with torch.no_grad():
+                state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
+                q_values = self.model(state_tensor)
+                index = q_values.argmax(dim=1).item()
 
         # ========== YOUR CODE ENDS ==========
         return index
@@ -284,7 +324,15 @@ class HardUpdateDQN(DQN):
         # TODO:
         # fill in the initialization and synchronization of the target model weights
         # ====================================
-        raise NotImplementedError("HardUpdateDQN class not implemented")
+        # raise NotImplementedError("HardUpdateDQN class not implemented")
+        
+        self.update_freq = update_freq
+        # build target network and synchronize weights
+        self.target_model = model(
+            self.observation_space, self.env.action_space.n, **model_kwargs
+        ).to(self.device)
+        self.target_model.load_state_dict(self.model.state_dict())
+        self.target_model.eval()
 
         # ========== YOUR CODE ENDS ==========
 
@@ -300,7 +348,30 @@ class HardUpdateDQN(DQN):
         # hint: you can copy over most of the code from the parent class
         # and only change two lines
         # ====================================
-        raise NotImplementedError("optimize_model func in HardUpdateDQN class not implemented")
+        # raise NotImplementedError("optimize_model func in HardUpdateDQN class not implemented")
+        
+        if len(self.replay_buffer) < 10 * self.batch_size:
+            return False, 0
+
+        states, actions, rewards, next_states, dones = self.replay_buffer.sample(
+            self.batch_size, device=self.device
+        )
+
+        q_values = self.model(states).gather(1, actions.unsqueeze(1)).squeeze(1)
+
+        with torch.no_grad():
+            next_q_values = self.target_model(next_states).max(dim=1)[0]   # ← 用 target_model
+            target_q = rewards + self.gamma * next_q_values * (~dones)
+
+        loss = self.loss_fn(q_values, target_q)
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        self._update_model()   # ← 加這行
+
+        return True, loss.item()
 
         # ========== YOUR CODE ENDS ==========
 
@@ -330,6 +401,10 @@ class SoftUpdateDQN(HardUpdateDQN):
         # ========== YOUR CODE HERE ==========
         # TODO
         # ====================================
-        raise NotImplementedError("update_model func in SoftUpdateDQN class not implemented")
+        # raise NotImplementedError("update_model func in SoftUpdateDQN class not implemented")
+        
+        # Polyak averaging: θ_target = τ * θ_model + (1 - τ) * θ_target
+        for target_param, param in zip(self.target_model.parameters(), self.model.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1.0 - self.tau) * target_param.data)
 
         # ========== YOUR CODE ENDS ==========
